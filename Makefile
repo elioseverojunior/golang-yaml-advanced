@@ -365,6 +365,37 @@ compose-logs: ## Show logs from all test containers
 compose-ps: ## Show status of test containers
 	@docker-compose -f docker-compose.test.yml ps
 
+# Project Management
+.PHONY: project-setup project-update project-report project-milestone
+project-setup: ## Set up GitHub project board and issues
+	@echo "$(GREEN)Setting up GitHub project board...$(NC)"
+	@./scripts/create-roadmap-issues.sh
+
+project-update: ## Update project metrics and progress
+	@echo "$(GREEN)Updating project metrics...$(NC)"
+	@gh issue list --label roadmap --json state,labels,title | \
+		jq -r '.[] | [.state, (.labels | map(.name) | join(",")), .title] | @csv' > .github/metrics.csv
+	@echo "$(GREEN)Project metrics updated in .github/metrics.csv$(NC)"
+
+project-report: ## Generate project status report
+	@echo "$(GREEN)Generating project status report...$(NC)"
+	@echo "# Project Status Report - $$(date +%Y-%m-%d)" > .github/STATUS.md
+	@echo "" >> .github/STATUS.md
+	@echo "## Open Issues by Phase" >> .github/STATUS.md
+	@for phase in 1 2 3 4 5 6 7; do \
+		count=$$(gh issue list --label "phase-$$phase" --state open --json number 2>/dev/null | jq '. | length'); \
+		echo "- Phase $$phase: $$count open issues" >> .github/STATUS.md; \
+	done
+	@echo "" >> .github/STATUS.md
+	@echo "## Recent Activity" >> .github/STATUS.md
+	@gh issue list --label roadmap --state all --limit 10 --json number,title,updatedAt 2>/dev/null | \
+		jq -r '.[] | "- #\(.number): \(.title) (updated: \(.updatedAt))"' >> .github/STATUS.md || echo "No issues found" >> .github/STATUS.md
+	@cat .github/STATUS.md
+
+project-milestone: ## Check milestone progress
+	@echo "$(GREEN)Checking milestone progress...$(NC)"
+	@gh api repos/:owner/:repo/milestones --jq '.[] | "Milestone: \(.title) - \(.open_issues) open, \(.closed_issues) closed"' 2>/dev/null || echo "$(YELLOW)No milestones found or gh CLI not configured$(NC)"
+
 # Help for Docker targets
 docker-help: ## Show Docker-specific targets
 	@echo "$(GREEN)Docker Testing Targets:$(NC)"

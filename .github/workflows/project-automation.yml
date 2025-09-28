@@ -1,0 +1,253 @@
+name: Project Board Automation
+
+on:
+  issues:
+    types: [opened, edited, labeled, unlabeled, assigned, unassigned, closed, reopened]
+  pull_request:
+    types: [opened, edited, labeled, unlabeled, assigned, unassigned, closed, reopened, ready_for_review, converted_to_draft]
+  issue_comment:
+    types: [created]
+
+jobs:
+  auto-move:
+    name: Auto-move issues and PRs
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      pull-requests: write
+      repository-projects: write
+    
+    steps:
+      - name: Move new issues to Backlog
+        if: github.event_name == 'issues' && github.event.action == 'opened'
+        uses: alex-page/github-project-automation-plus@v0.8.3
+        with:
+          project: YAML Library Independence v2.0
+          column: Backlog
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Move assigned issues to In Progress
+        if: github.event_name == 'issues' && github.event.action == 'assigned'
+        uses: alex-page/github-project-automation-plus@v0.8.3
+        with:
+          project: YAML Library Independence v2.0
+          column: In Progress
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Move PRs to In Review
+        if: github.event_name == 'pull_request' && github.event.action == 'opened'
+        uses: alex-page/github-project-automation-plus@v0.8.3
+        with:
+          project: YAML Library Independence v2.0
+          column: In Review
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Move merged PRs to Done
+        if: github.event_name == 'pull_request' && github.event.pull_request.merged == true
+        uses: alex-page/github-project-automation-plus@v0.8.3
+        with:
+          project: YAML Library Independence v2.0
+          column: Done
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Move blocked issues
+        if: github.event_name == 'issues' && contains(github.event.label.name, 'blocked')
+        uses: alex-page/github-project-automation-plus@v0.8.3
+        with:
+          project: YAML Library Independence v2.0
+          column: Blocked
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+  auto-label:
+    name: Auto-label based on content
+    runs-on: ubuntu-latest
+    if: github.event_name == 'issues' && github.event.action == 'opened'
+    permissions:
+      issues: write
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Label based on issue title
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const issue = context.payload.issue;
+            const title = issue.title;
+            const labels = [];
+            
+            // Extract YAML-XXX number
+            const match = title.match(/YAML-(\d{3})/);
+            if (match) {
+              const num = parseInt(match[1]);
+              
+              // Add phase labels based on number ranges
+              if (num >= 1 && num <= 14) {
+                labels.push('phase-1: foundation');
+                labels.push('component: scanner');
+              } else if (num >= 15 && num <= 32) {
+                labels.push('phase-2: parser');
+                labels.push('component: parser');
+              } else if (num >= 33 && num <= 50) {
+                labels.push('phase-3: node-tree');
+                labels.push('component: node-tree');
+              } else if (num >= 51 && num <= 66) {
+                labels.push('phase-4: serialization');
+                labels.push('component: emitter');
+              } else if (num >= 67 && num <= 78) {
+                labels.push('phase-5: type-system');
+                labels.push('component: schema');
+              } else if (num >= 79 && num <= 94) {
+                labels.push('phase-6: advanced');
+                if (num >= 79 && num <= 82) labels.push('component: parser');
+                else if (num >= 83 && num <= 86) labels.push('component: validation');
+                else if (num >= 87 && num <= 90) labels.push('component: transform');
+                else labels.push('component: performance');
+              } else if (num >= 95 && num <= 106) {
+                labels.push('phase-7: migration');
+                if (num >= 95 && num <= 98) labels.push('component: compat');
+                else if (num >= 99 && num <= 102) labels.push('component: testing');
+                else labels.push('component: docs');
+              }
+              
+              // Add roadmap label
+              labels.push('roadmap');
+              labels.push('yaml-v2');
+            }
+            
+            // Apply labels if any were identified
+            if (labels.length > 0) {
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                labels: labels
+              });
+            }
+
+  track-progress:
+    name: Update progress metrics
+    runs-on: ubuntu-latest
+    if: github.event_name == 'issues' && (github.event.action == 'closed' || github.event.action == 'reopened')
+    permissions:
+      issues: read
+      contents: write
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Calculate progress
+        uses: actions/github-script@v7
+        id: progress
+        with:
+          script: |
+            // Get all roadmap issues
+            const issues = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              labels: 'roadmap',
+              state: 'all',
+              per_page: 200
+            });
+            
+            // Count by phase
+            const phases = {
+              'phase-1': { total: 14, completed: 0 },
+              'phase-2': { total: 18, completed: 0 },
+              'phase-3': { total: 18, completed: 0 },
+              'phase-4': { total: 16, completed: 0 },
+              'phase-5': { total: 12, completed: 0 },
+              'phase-6': { total: 16, completed: 0 },
+              'phase-7': { total: 12, completed: 0 }
+            };
+            
+            let totalCompleted = 0;
+            const totalTasks = 106;
+            
+            for (const issue of issues.data) {
+              if (issue.state === 'closed') {
+                totalCompleted++;
+                for (const label of issue.labels) {
+                  const labelName = label.name;
+                  for (const phase in phases) {
+                    if (labelName.includes(phase)) {
+                      phases[phase].completed++;
+                    }
+                  }
+                }
+              }
+            }
+            
+            const overallProgress = Math.round((totalCompleted / totalTasks) * 100);
+            
+            // Generate progress report
+            let report = `# YAML Independence Progress\n\n`;
+            report += `## Overall: ${overallProgress}% Complete (${totalCompleted}/${totalTasks})\n\n`;
+            report += `| Phase | Progress | Tasks |\n`;
+            report += `|-------|----------|-------|\n`;
+            
+            for (const [phase, data] of Object.entries(phases)) {
+              const percent = Math.round((data.completed / data.total) * 100);
+              const progressBar = '█'.repeat(Math.floor(percent / 10)) + '░'.repeat(10 - Math.floor(percent / 10));
+              report += `| ${phase} | ${progressBar} ${percent}% | ${data.completed}/${data.total} |\n`;
+            }
+            
+            report += `\n*Last updated: ${new Date().toISOString()}*\n`;
+            
+            return report;
+      
+      - name: Update progress file
+        run: |
+          cat << 'EOF' > .github/PROGRESS.md
+          ${{ steps.progress.outputs.result }}
+          EOF
+      
+      - name: Commit progress update
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "📊 Update project progress metrics"
+          file_pattern: .github/PROGRESS.md
+          skip_checkout: true
+
+  milestone-check:
+    name: Check milestone completion
+    runs-on: ubuntu-latest
+    if: github.event_name == 'issues' && github.event.action == 'closed'
+    permissions:
+      issues: write
+    
+    steps:
+      - name: Check if milestone is complete
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const issue = context.payload.issue;
+            
+            // Check if this completes a milestone
+            if (issue.milestone) {
+              const milestone = await github.rest.issues.getMilestone({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                milestone_number: issue.milestone.number
+              });
+              
+              if (milestone.data.open_issues === 0) {
+                // Create a comment celebrating milestone completion
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: issue.number,
+                  body: `🎉 **Milestone Complete!**\n\n${milestone.data.title} has been completed with the closing of this issue.`
+                });
+                
+                // Close the milestone
+                await github.rest.issues.updateMilestone({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  milestone_number: milestone.data.number,
+                  state: 'closed'
+                });
+              }
+            }
