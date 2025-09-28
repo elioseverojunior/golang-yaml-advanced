@@ -56,10 +56,9 @@ jobs:
           - amd64
           - arm64
         go:
+          - "1.21"
           - "1.22"
           - "1.23"
-          - "1.24"
-          - "1.25"
         exclude:
           # Windows doesn't support ARM64 runners on GitHub Actions
           - os: windows-2025
