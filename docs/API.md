@@ -172,6 +172,21 @@ func MergeNodes(base, overlay *Node) *Node
 
 // Merge two documents
 func MergeDocuments(base, overlay *Document) *Document
+
+// Flexible merge supporting mixed input types (NodeTree or interface{})
+func MergeFlexible(base, override interface{}) (interface{}, error)
+
+// Always returns NodeTree result, converting inputs as needed
+func MergeFlexibleToNodeTree(base, override interface{}) (*NodeTree, error)
+
+// Performs flexible merge and returns YAML bytes directly
+func MergeFlexibleToYAML(base, override interface{}) ([]byte, error)
+
+// Converts various input types to NodeTree
+func ConvertToNodeTree(input interface{}) (*NodeTree, error)
+
+// Merges two interface{} values using Go's type system
+func MergeInterfaces(base, override interface{}) (interface{}, error)
 ```
 
 ### Diff Operations

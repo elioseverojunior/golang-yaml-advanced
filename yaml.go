@@ -1545,3 +1545,268 @@ func ConvertFromYAMLNode(yamlNode *yaml.Node) *Node {
 
 	return node
 }
+
+// Unmarshal provides compatibility with standard yaml.Unmarshal
+// It decodes YAML data into the provided interface
+func Unmarshal(data []byte, out interface{}) error {
+	// Use the standard yaml library for unmarshaling into structs
+	return yaml.Unmarshal(data, out)
+}
+
+// Marshal provides compatibility with standard yaml.Marshal
+// It encodes the provided interface into YAML
+func Marshal(in interface{}) ([]byte, error) {
+	// Use the standard yaml library for marshaling from structs
+	return yaml.Marshal(in)
+}
+
+// UnmarshalStrict is like Unmarshal but returns an error if there are unknown fields
+func UnmarshalStrict(data []byte, out interface{}) error {
+	decoder := yaml.NewDecoder(strings.NewReader(string(data)))
+	decoder.KnownFields(true)
+	return decoder.Decode(out)
+}
+
+// MarshalIndent provides compatibility for YAML marshaling with custom indentation
+func MarshalIndent(in interface{}, indent int) ([]byte, error) {
+	// Create encoder with custom indent
+	var buf strings.Builder
+	encoder := yaml.NewEncoder(&buf)
+	encoder.SetIndent(indent)
+
+	if err := encoder.Encode(in); err != nil {
+		return nil, err
+	}
+
+	if err := encoder.Close(); err != nil {
+		return nil, err
+	}
+
+	return []byte(buf.String()), nil
+}
+
+// MergeFlexible provides flexible merging between NodeTree and interface{} types
+// Following the strategy:
+// - If base is NodeTree, convert override to NodeTree if needed, merge and return NodeTree
+// - If base is interface{}, merge interfaces and return YAML bytes
+func MergeFlexible(base, override interface{}) (interface{}, error) {
+	// Handle nil cases
+	if base == nil && override == nil {
+		return nil, nil
+	}
+	if base == nil {
+		return override, nil
+	}
+	if override == nil {
+		return base, nil
+	}
+
+	// Check if base is NodeTree
+	if baseTree, isNodeTree := base.(*NodeTree); isNodeTree {
+		// Base is NodeTree - convert override to NodeTree if needed
+		overrideTree, err := ConvertToNodeTree(override)
+		if err != nil {
+			return nil, err
+		}
+
+		// Merge NodeTrees and return NodeTree
+		merged := MergeTrees(baseTree, overrideTree)
+		return merged, nil
+	}
+
+	// Base is interface{} - merge interfaces and return YAML
+	merged, err := MergeInterfaces(base, override)
+	if err != nil {
+		return nil, err
+	}
+
+	// Convert to YAML bytes
+	yamlBytes, err := Marshal(merged)
+	if err != nil {
+		return nil, err
+	}
+
+	return yamlBytes, nil
+}
+
+// ConvertToNodeTree converts various input types to NodeTree
+func ConvertToNodeTree(input interface{}) (*NodeTree, error) {
+	if input == nil {
+		tree := NewNodeTree()
+		doc := tree.AddDocument()
+		doc.SetRoot(NewNode(DocumentNode))
+		return tree, nil
+	}
+
+	// Already a NodeTree
+	if tree, ok := input.(*NodeTree); ok {
+		return tree, nil
+	}
+
+	// YAML bytes
+	if yamlBytes, ok := input.([]byte); ok {
+		return UnmarshalYAML(yamlBytes)
+	}
+
+	// YAML string
+	if yamlStr, ok := input.(string); ok {
+		return UnmarshalYAML([]byte(yamlStr))
+	}
+
+	// Go struct/map/slice - marshal to YAML then parse
+	yamlBytes, err := Marshal(input)
+	if err != nil {
+		return nil, err
+	}
+
+	tree, err := UnmarshalYAML(yamlBytes)
+	if err != nil {
+		return nil, err
+	}
+
+	// Ensure we have at least one document
+	if len(tree.Documents) == 0 {
+		doc := tree.AddDocument()
+		doc.SetRoot(NewNode(DocumentNode))
+	}
+
+	return tree, nil
+}
+
+// MergeInterfaces merges two interface{} values using Go's reflection
+// This handles maps, slices, and scalar values intelligently
+func MergeInterfaces(base, override interface{}) (interface{}, error) {
+	if base == nil {
+		return override, nil
+	}
+	if override == nil {
+		return base, nil
+	}
+
+	// Convert both to map[string]interface{} for merging
+	baseMap, err := interfaceToMap(base)
+	if err != nil {
+		// If base is not a map-like structure, override takes precedence
+		return override, nil
+	}
+
+	overrideMap, err := interfaceToMap(override)
+	if err != nil {
+		// If override is not a map-like structure, it replaces base
+		return override, nil
+	}
+
+	// Merge maps recursively
+	return mergeMaps(baseMap, overrideMap), nil
+}
+
+// interfaceToMap converts various types to map[string]interface{}
+func interfaceToMap(input interface{}) (map[string]interface{}, error) {
+	// Already a map
+	if m, ok := input.(map[string]interface{}); ok {
+		return m, nil
+	}
+	if m, ok := input.(map[interface{}]interface{}); ok {
+		result := make(map[string]interface{})
+		for k, v := range m {
+			if str, ok := k.(string); ok {
+				result[str] = v
+			}
+		}
+		return result, nil
+	}
+
+	// Try to marshal/unmarshal through YAML
+	yamlBytes, err := Marshal(input)
+	if err != nil {
+		return nil, err
+	}
+
+	var result map[string]interface{}
+	err = Unmarshal(yamlBytes, &result)
+	if err != nil {
+		return nil, err
+	}
+
+	return result, nil
+}
+
+// mergeMaps recursively merges two maps
+func mergeMaps(base, override map[string]interface{}) map[string]interface{} {
+	result := make(map[string]interface{})
+
+	// Copy base values
+	for k, v := range base {
+		result[k] = v
+	}
+
+	// Apply overrides
+	for k, overrideValue := range override {
+		baseValue, exists := result[k]
+
+		if !exists {
+			// Key doesn't exist in base, add it
+			result[k] = overrideValue
+			continue
+		}
+
+		// Both exist - try to merge if both are maps
+		if baseMap, baseIsMap := baseValue.(map[string]interface{}); baseIsMap {
+			if overrideMap, overrideIsMap := overrideValue.(map[string]interface{}); overrideIsMap {
+				result[k] = mergeMaps(baseMap, overrideMap)
+				continue
+			}
+		}
+
+		// For arrays, append override to base
+		if baseSlice, baseIsSlice := baseValue.([]interface{}); baseIsSlice {
+			if overrideSlice, overrideIsSlice := overrideValue.([]interface{}); overrideIsSlice {
+				result[k] = append(baseSlice, overrideSlice...)
+				continue
+			}
+		}
+
+		// Otherwise, override takes precedence
+		result[k] = overrideValue
+	}
+
+	return result
+}
+
+// MergeFlexibleToNodeTree is a convenience function that always returns a NodeTree
+// It converts both inputs to NodeTree if needed and merges them
+func MergeFlexibleToNodeTree(base, override interface{}) (*NodeTree, error) {
+	baseTree, err := ConvertToNodeTree(base)
+	if err != nil {
+		return nil, err
+	}
+
+	overrideTree, err := ConvertToNodeTree(override)
+	if err != nil {
+		return nil, err
+	}
+
+	return MergeTrees(baseTree, overrideTree), nil
+}
+
+// MergeFlexibleToYAML is a convenience function that always returns YAML bytes
+// It merges the inputs and serializes the result to YAML
+func MergeFlexibleToYAML(base, override interface{}) ([]byte, error) {
+	result, err := MergeFlexible(base, override)
+	if err != nil {
+		return nil, err
+	}
+
+	// If result is already YAML bytes, return as-is
+	if yamlBytes, ok := result.([]byte); ok {
+		return yamlBytes, nil
+	}
+
+	// If result is NodeTree, serialize it
+	if tree, ok := result.(*NodeTree); ok {
+		return tree.ToYAML()
+	}
+
+	// Otherwise, marshal the interface
+	return Marshal(result)
+}
