@@ -1,0 +1,55 @@
+# Add 'documentation' label to any change in docs folder or markdown files
+documentation:
+  - changed-files:
+    - any-glob-to-any-file:
+      - docs/**
+      - '**/*.md'
+      - examples/**
+
+# Add 'test' label to any change in test files
+test:
+  - changed-files:
+    - any-glob-to-any-file:
+      - '**/*_test.go'
+      - '**/testdata/**'
+
+# Add 'ci' label to any change in .github folder
+ci:
+  - changed-files:
+    - any-glob-to-any-file:
+      - .github/**
+
+# Add 'dependencies' label to any change in go.mod or go.sum
+dependencies:
+  - changed-files:
+    - any-glob-to-any-file:
+      - go.mod
+      - go.sum
+
+# Add 'core' label to core functionality changes
+core:
+  - changed-files:
+    - any-glob-to-any-file:
+      - yaml.go
+      - merge.go
+      - diff.go
+      - transform.go
+      - query.go
+      - validation.go
+
+# Add 'config' label to configuration-related changes
+config:
+  - changed-files:
+    - any-glob-to-any-file:
+      - empty_line_config.go
+      - '**/config*.go'
+
+# Add 'performance' label based on PR title or body
+performance:
+  - title: ['perf:', 'performance:', 'optimize:', 'optimization:']
+  - body: ['performance', 'optimization', 'benchmark']
+
+# Add 'breaking-change' label based on PR title or body
+breaking-change:
+  - title: ['BREAKING:', 'breaking change:']
+  - body: ['BREAKING CHANGE', 'breaking change', '+semver: break', '+semver: major']

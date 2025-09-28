@@ -5,6 +5,57 @@ All notable changes to the Golang YAML Advanced library will be documented in th
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2025-09-28
+
+### Added
+- **Empty Line Configuration System**: Full control over empty line handling in YAML output
+  - `EmptyLineConfig` structure with configurable policies
+  - `EmptyLinesKeepAsIs` - Preserves formatting using smart heuristics (default)
+  - `EmptyLinesNormalize` - Ensures consistent spacing with specified line count
+  - `EmptyLinesRemove` - Removes all empty lines for compact output
+- **Enhanced Node Structure**: Better tracking of document structure
+  - `EmptyLinesBefore` and `EmptyLinesAfter` fields for precise empty line tracking
+  - Merge-safe design that preserves formatting through document transformations
+- **Configuration Helper Functions**:
+  - `DefaultEmptyLineConfig()` - Returns default keep-as-is configuration
+  - `NormalizedEmptyLineConfig(count)` - Creates normalized spacing configuration
+  - `NoEmptyLinesConfig()` - Creates configuration to remove all empty lines
+- **Improved Comment Preservation**: Better handling of comment-only YAML files
+  - Correctly parses and preserves files containing only comments
+  - Maintains empty lines between comment blocks and fields
+- **Deprecation Documentation**: New DEPRECATIONS.md file
+  - Clear deprecation policy and timelines
+  - Migration guides for deprecated features
+  - Planned changes for v2.0.0
+
+### Enhanced
+- **Helm Chart Support**: Perfect preservation of Helm Chart.yaml formatting
+  - Maintains exact spacing between sections
+  - Preserves comment blocks with proper formatting
+  - Keeps quote styles and field ordering
+- **Document Processing**: Improved `ToYAMLWithConfig()` method
+  - Applies empty line policies during serialization
+  - Supports per-document configuration
+- **Parse Function Updates**: Enhanced `UnmarshalYAML()` with better comment handling
+  - Properly handles empty documents and comment-only files
+  - Maintains anchor resolution in all cases
+
+### Fixed
+- Empty lines before comment blocks now preserved correctly
+- Comment-only YAML files parse and serialize properly
+- Anchor processing maintained through new parsing pipeline
+
+### Changed
+- **Licensing**: Project is now dual-licensed under Apache 2.0 and MIT licenses
+  - Users can choose either license that best fits their needs
+  - All contributions will be dual-licensed going forward
+
+### Documentation
+- **Community Documentation**: Added comprehensive community guidelines
+  - CODE_OF_CONDUCT.md - Community standards and enforcement
+  - CONTRIBUTING.md - Development setup and contribution guide
+  - SECURITY.md - Security best practices and vulnerability reporting
+
 ## [1.1.0] - 2025-09-28
 
 ### Added
@@ -139,4 +190,9 @@ For issues and feature requests, please use the [GitHub issue tracker](https://g
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is dual-licensed under either:
+
+* Apache License, Version 2.0 ([LICENSE-APACHE-2.0](LICENSE-APACHE-2.0))
+* MIT license ([LICENSE-MIT](LICENSE-MIT))
+
+at your option. See the [LICENSE](LICENSE) file for details.

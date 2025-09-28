@@ -1,0 +1,104 @@
+name: Question
+description: Ask a question about using golang-yaml-advanced
+title: "[QUESTION] "
+labels: ["question", "triage"]
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for your interest in golang-yaml-advanced! Before asking, please check:
+        - [README](https://github.com/elioetibr/golang-yaml-advanced/blob/main/README.md)
+        - [API Documentation](https://github.com/elioetibr/golang-yaml-advanced/blob/main/docs/API.md)
+        - [Examples](https://github.com/elioetibr/golang-yaml-advanced/tree/main/examples)
+        - [Existing Issues](https://github.com/elioetibr/golang-yaml-advanced/issues)
+
+  - type: textarea
+    id: question
+    attributes:
+      label: Question
+      description: What would you like to know?
+      placeholder: How do I preserve comments when merging YAML files with different structures?
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: Provide any relevant context about your use case
+      placeholder: |
+        I'm building a configuration management tool that needs to merge multiple YAML files
+        while preserving all comments and formatting...
+    validations:
+      required: false
+
+  - type: textarea
+    id: attempted
+    attributes:
+      label: What I've Tried
+      description: Describe what you've already attempted
+      render: go
+      placeholder: |
+        I tried using MergeTrees() but the comments from the overlay are lost:
+
+        merged := yaml.MergeTrees(base, overlay)
+    validations:
+      required: false
+
+  - type: textarea
+    id: code-example
+    attributes:
+      label: Code Example
+      description: If applicable, provide a code example showing what you're trying to do
+      render: go
+      placeholder: |
+        package main
+
+        import (
+            "github.com/elioetibr/golang-yaml-advanced"
+        )
+
+        func main() {
+            // Your code here
+        }
+    validations:
+      required: false
+
+  - type: dropdown
+    id: documentation
+    attributes:
+      label: Documentation
+      description: Did you find relevant documentation for your question?
+      options:
+        - No documentation found
+        - Documentation exists but unclear
+        - Documentation exists but incomplete
+        - Haven't checked documentation yet
+    validations:
+      required: true
+
+  - type: textarea
+    id: related
+    attributes:
+      label: Related Issues/PRs
+      description: Link any related issues or pull requests
+      placeholder: |
+        - #123
+        - #456
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Checklist
+      description: Please confirm the following
+      options:
+        - label: I have searched existing issues for similar questions
+          required: true
+        - label: I have checked the documentation
+          required: false
+        - label: I have looked at the examples
+          required: false

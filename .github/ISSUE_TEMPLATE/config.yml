@@ -1,0 +1,14 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security Issue
+    url: mailto:security@elio.eti.br
+    about: Please report security vulnerabilities via email instead of GitHub issues
+  - name: GitHub Discussions
+    url: https://github.com/elioetibr/golang-yaml-advanced/discussions
+    about: For general discussions, ideas, and community support
+  - name: Documentation
+    url: https://github.com/elioetibr/golang-yaml-advanced/tree/main/docs
+    about: Check our documentation for API reference and guides
+  - name: Examples
+    url: https://github.com/elioetibr/golang-yaml-advanced/tree/main/examples
+    about: Browse code examples for common use cases

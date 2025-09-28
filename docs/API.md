@@ -189,6 +189,39 @@ func ConvertToNodeTree(input interface{}) (*NodeTree, error)
 func MergeInterfaces(base, override interface{}) (interface{}, error)
 ```
 
+### Empty Line Configuration
+
+```go
+// Empty line handling policies
+type EmptyLinePolicy int
+
+const (
+    EmptyLinesKeepAsIs EmptyLinePolicy = iota  // Default: preserve using heuristics
+    EmptyLinesNormalize                        // Normalize to consistent count
+    EmptyLinesRemove                          // Remove all empty lines
+)
+
+// Configuration for empty line handling
+type EmptyLineConfig struct {
+    Policy                 EmptyLinePolicy
+    NormalizedCount        int  // Number of lines when normalizing
+    PreserveBeforeComments bool
+    PreserveAfterComments  bool
+}
+
+// Returns default keep-as-is configuration
+func DefaultEmptyLineConfig() EmptyLineConfig
+
+// Creates normalized spacing configuration
+func NormalizedEmptyLineConfig(count int) EmptyLineConfig
+
+// Creates configuration to remove all empty lines
+func NoEmptyLinesConfig() EmptyLineConfig
+
+// Serializes document with specific empty line configuration
+func (d *Document) ToYAMLWithConfig(config EmptyLineConfig) ([]byte, error)
+```
+
 ### Diff Operations
 
 ```go

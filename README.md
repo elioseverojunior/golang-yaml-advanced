@@ -21,6 +21,7 @@ A powerful, enterprise-grade YAML processing library for Go that extends `gopkg.
 - **Deep Nesting**: Efficiently processes deeply nested structures with metadata preservation
 - **Style Preservation**: Maintains scalar styles (literal `|`, folded `>`, quoted, flow)
 - **Format Preservation**: Preserves empty lines and uses 2-space indentation by default
+- **Empty Line Configuration**: Full control over empty line handling with multiple policies
 
 ### Advanced Features
 - **Schema Validation**: JSON Schema-like validation with comprehensive type checking
@@ -227,6 +228,35 @@ merged := golang_yaml_advanced.MergeTrees(base, overlay)
 
 // Serialize the result
 output, _ := merged.ToYAML()
+```
+
+### Empty Line Configuration
+
+Control how empty lines are handled in YAML output:
+
+```go
+// Parse YAML
+tree, _ := golang_yaml_advanced.UnmarshalYAML([]byte(yamlContent))
+
+// Remove all empty lines for compact output
+tree.EmptyLineConfig = golang_yaml_advanced.NoEmptyLinesConfig()
+compactYAML, _ := tree.ToYAML()
+
+// Normalize to exactly 1 empty line between sections
+tree.EmptyLineConfig = golang_yaml_advanced.NormalizedEmptyLineConfig(1)
+normalizedYAML, _ := tree.ToYAML()
+
+// Keep original formatting (default)
+tree.EmptyLineConfig = golang_yaml_advanced.DefaultEmptyLineConfig()
+preservedYAML, _ := tree.ToYAML()
+```
+
+Perfect for Helm Chart.yaml files and other YAML that requires specific formatting:
+
+```go
+// Preserves exact Helm chart formatting
+helmChart, _ := golang_yaml_advanced.UnmarshalYAML([]byte(chartYAML))
+output, _ := helmChart.ToYAML() // Maintains comments and empty lines exactly
 ```
 
 ### Flexible Merge Operations
@@ -548,6 +578,7 @@ Comprehensive documentation is available:
 - **[Features Overview](docs/FEATURES.md)** - Detailed feature descriptions
 - **[YAML 1.2.2 Compliance](docs/YAML_1.2.2_COMPLIANCE.md)** - Specification compliance details
 - **[Parser Extension](docs/YAML_PARSER_AND_MERGER_ADVANCED.md)** - Technical implementation details
+- **[Deprecations](DEPRECATIONS.md)** - Deprecated features and migration guides
 
 ## Testing
 
@@ -593,16 +624,42 @@ The library maintains comprehensive test coverage:
 
 ## Contributing
 
-Contributions are welcome! Please ensure:
-1. All tests pass (`go test ./...`)
-2. New features include comprehensive tests (aim for >80% coverage)
-3. Comments are preserved in any new parsing logic
-4. New features include examples
-5. Code follows Go conventions
+We welcome contributions from the community! Please read our [Contributing Guide](CONTRIBUTING.md) for details on:
+
+- Development setup and prerequisites
+- Code style and standards
+- Testing requirements
+- Submitting pull requests
+- Community guidelines
+
+### Quick Start for Contributors
+
+1. Fork and clone the repository
+2. Install dependencies: `go mod download`
+3. Run tests: `make test`
+4. Make your changes following our guidelines
+5. Submit a pull request
+
+For security issues, please see our [Security Policy](SECURITY.md) instead of opening public issues.
+
+All participants must follow our [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## License
 
-MIT License - See LICENSE file for details
+Licensed under either of
+
+ * Apache License, Version 2.0
+   ([LICENSE-APACHE-2.0](LICENSE-APACHE-2.0) or http://www.apache.org/licenses/LICENSE-2.0)
+ * MIT license
+   ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
+
+at your option.
+
+## Contribution
+
+Unless you explicitly state otherwise, any contribution intentionally submitted
+for inclusion in the work by you, as defined in the Apache-2.0 license, shall be
+dual licensed as above, without any additional terms or conditions.
 
 ## Acknowledgments
 

@@ -75,22 +75,24 @@ func (s NodeStyle) String() string {
 }
 
 type Node struct {
-	Kind        NodeKind
-	Style       NodeStyle
-	Tag         string
-	Value       interface{}
-	Anchor      string
-	Alias       *Node
-	Parent      *Node
-	Children    []*Node
-	Key         *Node
-	Line        int
-	Column      int
-	HeadComment []string // We can have multiple lines
-	LineComment string
-	FootComment []string // We can have multiple lines
-	EmptyLines  []int    // Track empty lines: position and count (e.g., [0,2] means 2 empty lines before node)
-	Metadata    map[string]interface{}
+	Kind            NodeKind
+	Style           NodeStyle
+	Tag             string
+	Value           interface{}
+	Anchor          string
+	Alias           *Node
+	Parent          *Node
+	Children        []*Node
+	Key             *Node
+	Line            int
+	Column          int
+	HeadComment     []string // We can have multiple lines, including empty line markers
+	LineComment     string
+	FootComment     []string // We can have multiple lines
+	EmptyLinesBefore int     // Number of empty lines before this node (will be encoded in HeadComment)
+	EmptyLinesAfter  int     // Number of empty lines after this node
+	EmptyLines      []int    // Deprecated: kept for backwards compatibility
+	Metadata        map[string]interface{}
 }
 
 type Document struct {
@@ -106,14 +108,16 @@ type Directive struct {
 }
 
 type NodeTree struct {
-	Documents   []*Document
-	Current     *Document
-	CurrentNode *Node
+	Documents       []*Document
+	Current         *Document
+	CurrentNode     *Node
+	EmptyLineConfig EmptyLineConfig // Configuration for empty line handling
 }
 
 func NewNodeTree() *NodeTree {
 	return &NodeTree{
-		Documents: make([]*Document, 0),
+		Documents:       make([]*Document, 0),
+		EmptyLineConfig: DefaultEmptyLineConfig(),
 	}
 }
 
@@ -279,19 +283,21 @@ func (n *Node) cloneWithSeen(seen map[*Node]*Node) *Node {
 	}
 
 	clone := &Node{
-		Kind:        n.Kind,
-		Style:       n.Style,
-		Tag:         n.Tag,
-		Value:       n.Value,
-		Anchor:      n.Anchor,
-		Line:        n.Line,
-		Column:      n.Column,
-		HeadComment: append([]string(nil), n.HeadComment...),
-		LineComment: n.LineComment,
-		FootComment: append([]string(nil), n.FootComment...),
-		EmptyLines:  append([]int(nil), n.EmptyLines...),
-		Children:    make([]*Node, 0, len(n.Children)),
-		Metadata:    make(map[string]interface{}),
+		Kind:             n.Kind,
+		Style:            n.Style,
+		Tag:              n.Tag,
+		Value:            n.Value,
+		Anchor:           n.Anchor,
+		Line:             n.Line,
+		Column:           n.Column,
+		HeadComment:      append([]string(nil), n.HeadComment...),
+		LineComment:      n.LineComment,
+		FootComment:      append([]string(nil), n.FootComment...),
+		EmptyLinesBefore: n.EmptyLinesBefore,
+		EmptyLinesAfter:  n.EmptyLinesAfter,
+		EmptyLines:       append([]int(nil), n.EmptyLines...),
+		Children:         make([]*Node, 0, len(n.Children)),
+		Metadata:         make(map[string]interface{}),
 	}
 
 	// Mark this node as seen
@@ -697,6 +703,10 @@ func (d *Document) GetAnchor(name string) *Node {
 }
 
 func (n *Node) ToYAMLNode() *yaml.Node {
+	return n.ToYAMLNodeWithConfig(DefaultEmptyLineConfig())
+}
+
+func (n *Node) ToYAMLNodeWithConfig(config EmptyLineConfig) *yaml.Node {
 	if n == nil {
 		return nil
 	}
@@ -768,6 +778,10 @@ func (n *Node) ToYAMLNode() *yaml.Node {
 }
 
 func (d *Document) ToYAML() ([]byte, error) {
+	return d.ToYAMLWithConfig(DefaultEmptyLineConfig())
+}
+
+func (d *Document) ToYAMLWithConfig(config EmptyLineConfig) ([]byte, error) {
 	if d.Root == nil {
 		return []byte{}, nil
 	}
@@ -798,7 +812,24 @@ func (d *Document) ToYAML() ([]byte, error) {
 		return nil, err
 	}
 
-	return []byte(buf.String()), nil
+	output := []byte(buf.String())
+
+	// Apply empty line policy
+	switch config.Policy {
+	case EmptyLinesKeepAsIs:
+		if config.PreserveBeforeComments {
+			// Use heuristic to add empty lines before comments
+			output = addEmptyLinesBeforeCommentBlocks(output)
+		}
+	case EmptyLinesRemove:
+		// Remove all empty lines
+		output = removeEmptyLines(output)
+	case EmptyLinesNormalize:
+		// Normalize to specified number of empty lines
+		output = normalizeEmptyLines(output, config.NormalizedCount)
+	}
+
+	return output, nil
 }
 
 func (nt *NodeTree) ToYAML() ([]byte, error) {
@@ -808,42 +839,54 @@ func (nt *NodeTree) ToYAML() ([]byte, error) {
 
 	result := []byte{}
 	for i, doc := range nt.Documents {
-		docBytes, err := doc.ToYAML()
+		docBytes, err := doc.ToYAMLWithConfig(nt.EmptyLineConfig)
 		if err != nil {
 			return nil, fmt.Errorf("failed to marshal document %d: %w", i, err)
 		}
 
-		// Post-process to add empty lines before @schema comments
-		processedBytes := addEmptyLinesBeforeSchemaComments(docBytes)
-
 		if i > 0 {
 			result = append(result, []byte("---\n")...)
 		}
-		result = append(result, processedBytes...)
+		result = append(result, docBytes...)
 	}
 
 	return result, nil
 }
 
-// addEmptyLinesBeforeSchemaComments adds empty lines before @schema comment blocks
-func addEmptyLinesBeforeSchemaComments(input []byte) []byte {
+// addEmptyLinesBeforeCommentBlocks adds empty lines before comment blocks
+// This uses heuristics to preserve formatting conventions
+func addEmptyLinesBeforeCommentBlocks(input []byte) []byte {
 	lines := strings.Split(string(input), "\n")
 	var output []string
+	inCommentBlock := false
 
 	for i := 0; i < len(lines); i++ {
 		currentLine := lines[i]
+		trimmedCurrent := strings.TrimSpace(currentLine)
+
+		// Determine if current line is a comment
+		isComment := strings.HasPrefix(trimmedCurrent, "#")
 
 		// Check if we need to add an empty line before this line
 		if i > 0 {
 			prevLine := lines[i-1]
 			trimmedPrev := strings.TrimSpace(prevLine)
+			prevIsComment := strings.HasPrefix(trimmedPrev, "#")
 
-			// Add empty line before @schema if previous line is not empty and not a comment
-			if strings.Contains(currentLine, "# @schema") &&
-				prevLine != "" &&
-				!strings.HasPrefix(trimmedPrev, "#") {
+			// Add empty line before a comment block that follows a non-comment line
+			if isComment && !prevIsComment && trimmedPrev != "" {
+				// This is the start of a new comment block after content
 				output = append(output, "")
+				inCommentBlock = true
+			} else if isComment && prevIsComment {
+				// Continue in comment block
+				inCommentBlock = true
+			} else if !isComment && inCommentBlock {
+				// End of comment block
+				inCommentBlock = false
 			}
+		} else if isComment {
+			inCommentBlock = true
 		}
 
 		output = append(output, currentLine)
@@ -852,8 +895,198 @@ func addEmptyLinesBeforeSchemaComments(input []byte) []byte {
 	return []byte(strings.Join(output, "\n"))
 }
 
+// Keep the old function name as an alias for backwards compatibility
+func addEmptyLinesBeforeSchemaComments(input []byte) []byte {
+	return addEmptyLinesBeforeCommentBlocks(input)
+}
+
+// removeEmptyLines removes all empty lines from the output
+func removeEmptyLines(input []byte) []byte {
+	lines := strings.Split(string(input), "\n")
+	var output []string
+
+	for _, line := range lines {
+		// Keep non-empty lines
+		if strings.TrimSpace(line) != "" {
+			output = append(output, line)
+		}
+	}
+
+	// Add a final newline if there are lines
+	if len(output) > 0 {
+		return []byte(strings.Join(output, "\n") + "\n")
+	}
+	return []byte{}
+}
+
+// normalizeEmptyLines ensures consistent empty line counts
+func normalizeEmptyLines(input []byte, count int) []byte {
+	lines := strings.Split(string(input), "\n")
+	var output []string
+	lastWasContent := false
+
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		isComment := strings.HasPrefix(trimmed, "#")
+		isEmpty := trimmed == ""
+
+		if isEmpty {
+			// Skip empty lines, we'll add them as needed
+			continue
+		}
+
+		// Add normalized empty lines before comments (except at start)
+		if isComment && lastWasContent && i > 0 {
+			for j := 0; j < count; j++ {
+				output = append(output, "")
+			}
+		}
+
+		output = append(output, line)
+		lastWasContent = !isComment
+	}
+
+	return []byte(strings.Join(output, "\n"))
+}
+
+// UnmarshalYAMLWithEmptyLines parses YAML and tracks empty lines
+func UnmarshalYAMLWithEmptyLines(data []byte) (*NodeTree, error) {
+	tree := NewNodeTree()
+
+	// Split by document separator to handle multi-document YAML
+	content := string(data)
+	documents := splitDocuments(content)
+
+	for _, docContent := range documents {
+		// Parse the document and track empty lines
+		doc, err := parseDocumentWithEmptyLines(docContent)
+		if err != nil {
+			return nil, err
+		}
+		tree.Documents = append(tree.Documents, doc)
+	}
+
+	return tree, nil
+}
+
+// parseDocumentWithEmptyLines parses a single document and tracks empty lines
+func parseDocumentWithEmptyLines(docContent string) (*Document, error) {
+	// First, parse normally with yaml.v3
+	var yamlNode yaml.Node
+	err := yaml.Unmarshal([]byte(docContent), &yamlNode)
+
+	// Check if it's empty or comments-only (yaml.v3 returns empty node for comments)
+	if err != nil || yamlNode.Kind == 0 {
+		// Check if it's just comments
+		lines := strings.Split(docContent, "\n")
+		hasYAMLContent := false
+		var commentLines []string
+
+		for _, line := range lines {
+			trimmed := strings.TrimSpace(line)
+			if trimmed != "" && !strings.HasPrefix(trimmed, "#") && trimmed != "---" {
+				hasYAMLContent = true
+				break
+			}
+			if trimmed != "---" && (trimmed != "" || len(commentLines) > 0) {
+				commentLines = append(commentLines, line)
+			}
+		}
+
+		if !hasYAMLContent && len(commentLines) > 0 {
+			// Remove trailing empty lines
+			for len(commentLines) > 0 && strings.TrimSpace(commentLines[len(commentLines)-1]) == "" {
+				commentLines = commentLines[:len(commentLines)-1]
+			}
+
+			// Create a document with only comments
+			doc := &Document{
+				Anchors: make(map[string]*Node),
+			}
+			rootNode := NewNode(DocumentNode)
+			rootNode.HeadComment = commentLines
+			doc.SetRoot(rootNode)
+			return doc, nil
+		}
+		if err != nil {
+			return nil, fmt.Errorf("failed to unmarshal document: %w", err)
+		}
+		// If we get here with yamlNode.Kind == 0, it's an empty document
+		// Return empty document
+		doc := &Document{
+			Anchors: make(map[string]*Node),
+		}
+		doc.SetRoot(nil)
+		return doc, nil
+	}
+
+	// Convert to our Node structure
+	rootNode := ConvertFromYAMLNode(&yamlNode)
+
+	// Now analyze the raw content to track empty lines
+	trackEmptyLines(docContent, rootNode)
+
+	doc := &Document{
+		Anchors: make(map[string]*Node),
+	}
+
+	// Handle anchor resolution
+	if rootNode != nil {
+		resolveAnchors(rootNode, doc)
+	}
+
+	doc.SetRoot(rootNode)
+
+	return doc, nil
+}
+
+// trackEmptyLines analyzes raw YAML content and adds empty line information to nodes
+func trackEmptyLines(content string, root *Node) {
+	lines := strings.Split(content, "\n")
+
+	// Build a line-to-node map based on line numbers
+	lineNodeMap := make(map[int]*Node)
+	root.Walk(func(n *Node) bool {
+		if n.Line > 0 {
+			lineNodeMap[n.Line] = n
+		}
+		return true
+	})
+
+	// Track empty lines before each node
+	for lineNum := 1; lineNum <= len(lines); lineNum++ {
+		if node, exists := lineNodeMap[lineNum]; exists {
+			// Count empty lines before this node
+			emptyCount := 0
+			for i := lineNum - 2; i >= 0; i-- { // -2 because array is 0-based and we look before current line
+				if strings.TrimSpace(lines[i]) == "" {
+					emptyCount++
+				} else {
+					break
+				}
+			}
+			node.EmptyLinesBefore = emptyCount
+		}
+	}
+}
+
 // UnmarshalYAML is a custom unmarshal function that preserves comments even when there's no content
 func UnmarshalYAML(data []byte) (*NodeTree, error) {
+	tree := NewNodeTree()
+
+	// Handle completely empty input
+	if len(data) == 0 {
+		doc := tree.AddDocument()
+		doc.SetRoot(nil)
+		return tree, nil
+	}
+
+	// Parse with empty line tracking
+	return UnmarshalYAMLWithEmptyLines(data)
+}
+
+// Legacy parsing function - kept for reference but now redirects to new implementation
+func UnmarshalYAMLLegacy(data []byte) (*NodeTree, error) {
 	tree := NewNodeTree()
 
 	// Handle completely empty input

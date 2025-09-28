@@ -1,0 +1,31 @@
+# This is a CODEOWNERS file for automatic review assignment
+# Each line is a file pattern followed by one or more owners
+
+# Default owners for everything in the repo
+* @elioetibr/maintainers
+
+# Core library files
+/yaml.go @elioetibr/maintainers
+/merge.go @elioetibr/maintainers
+/diff.go @elioetibr/maintainers
+/transform.go @elioetibr/maintainers
+/query.go @elioetibr/maintainers
+/validation.go @elioetibr/maintainers
+/empty_line_config.go @elioetibr/maintainers
+
+# Documentation
+/docs/ @elioetibr/maintainers
+*.md @elioetibr/maintainers
+
+# GitHub configuration
+/.github/ @elioetibr/maintainers
+
+# Dependencies
+/go.mod @elioetibr/maintainers
+/go.sum @elioetibr/maintainers
+
+# Examples
+/examples/ @elioetibr/maintainers
+
+# Test files - can be reviewed by contributors
+*_test.go @elioetibr/maintainers
