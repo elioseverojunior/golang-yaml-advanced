@@ -1,0 +1,151 @@
+services:
+  # Go 1.20 Test Service
+  test-go120:
+    image: golang:1.20
+    container_name: yaml-test-go120
+    working_dir: /workspace
+    volumes:
+      - .:/workspace:ro
+    command: >
+      sh -c "
+        echo '=== Go 1.20 ===' &&
+        go version &&
+        go test -v -race -cover ./...
+      "
+    environment:
+      - CGO_ENABLED=1
+      - GOOS=linux
+      - GOARCH=amd64
+
+  # Go 1.21 Test Service
+  test-go121:
+    image: golang:1.21
+    container_name: yaml-test-go121
+    working_dir: /workspace
+    volumes:
+      - .:/workspace:ro
+    command: >
+      sh -c "
+        echo '=== Go 1.21 ===' &&
+        go version &&
+        go test -v -race -cover ./...
+      "
+    environment:
+      - CGO_ENABLED=1
+      - GOOS=linux
+      - GOARCH=amd64
+
+  # Go 1.22 Test Service
+  test-go122:
+    image: golang:1.22
+    container_name: yaml-test-go122
+    working_dir: /workspace
+    volumes:
+      - .:/workspace:ro
+    command: >
+      sh -c "
+        echo '=== Go 1.22 ===' &&
+        go version &&
+        go test -v -race -cover ./...
+      "
+    environment:
+      - CGO_ENABLED=1
+      - GOOS=linux
+      - GOARCH=amd64
+
+  # Go 1.23 Test Service
+  test-go123:
+    image: golang:1.23
+    container_name: yaml-test-go123
+    working_dir: /workspace
+    volumes:
+      - .:/workspace:ro
+    command: >
+      sh -c "
+        echo '=== Go 1.23 ===' &&
+        go version &&
+        go test -v -race -cover ./...
+      "
+    environment:
+      - CGO_ENABLED=1
+      - GOOS=linux
+      - GOARCH=amd64
+
+  # Latest Go Test Service
+  test-latest:
+    image: golang:latest
+    container_name: yaml-test-latest
+    working_dir: /workspace
+    volumes:
+      - .:/workspace:ro
+    command: >
+      sh -c "
+        echo '=== Go Latest ===' &&
+        go version &&
+        go test -v -race -cover ./...
+      "
+    environment:
+      - CGO_ENABLED=1
+      - GOOS=linux
+      - GOARCH=amd64
+
+  # Benchmark Service
+  benchmark:
+    image: golang:1.22
+    container_name: yaml-benchmark
+    working_dir: /workspace
+    volumes:
+      - .:/workspace:ro
+    command: >
+      sh -c "
+        echo '=== Benchmarks ===' &&
+        go test -bench=. -benchmem -run=^$ ./...
+      "
+
+  # Coverage Service
+  coverage:
+    image: golang:1.22
+    container_name: yaml-coverage
+    working_dir: /workspace
+    volumes:
+      - .:/workspace:ro
+      - ./coverage:/coverage
+    command: >
+      sh -c "
+        echo '=== Coverage Report ===' &&
+        go test -coverprofile=/coverage/coverage.out ./... &&
+        go tool cover -html=/coverage/coverage.out -o /coverage/coverage.html &&
+        go tool cover -func=/coverage/coverage.out
+      "
+
+  # Linting Service
+  lint:
+    image: golangci/golangci-lint:latest
+    container_name: yaml-lint
+    working_dir: /workspace
+    volumes:
+      - .:/workspace:ro
+    command: golangci-lint run --timeout=5m ./...
+
+  # Security Scan Service
+  security:
+    image: securego/gosec:latest
+    container_name: yaml-security
+    working_dir: /workspace
+    volumes:
+      - .:/workspace:ro
+    command: -fmt json -out /workspace/security-report.json ./...
+
+# Define test profiles for different scenarios
+x-test-base: &test-base
+  working_dir: /workspace
+  volumes:
+    - .:/workspace:ro
+  environment:
+    - CGO_ENABLED=1
+    - GOOS=linux
+
+# Profile for quick tests
+x-quick-test: &quick-test
+  <<: *test-base
+  command: go test -short ./...

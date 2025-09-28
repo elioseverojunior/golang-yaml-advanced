@@ -180,3 +180,223 @@ reports: coverage-html ## Generate all reports
 # Installation verification
 verify: install test ## Verify installation and run basic tests
 	@echo "$(GREEN)Verification complete$(NC)"
+
+# Docker-based multi-version testing
+GO_VERSIONS := 1.20 1.21 1.22 1.23
+DOCKER_RUN := docker run --rm -v "$(PWD)":/workspace -w /workspace
+
+docker-test: ## Test with all supported Go versions using Docker
+	@echo "$(GREEN)========================================$(NC)"
+	@echo "$(GREEN)Testing with Multiple Go Versions$(NC)"
+	@echo "$(GREEN)========================================$(NC)"
+	@for version in $(GO_VERSIONS); do \
+		echo ""; \
+		echo "$(YELLOW)Testing with Go $$version...$(NC)"; \
+		echo "----------------------------------------"; \
+		$(DOCKER_RUN) golang:$$version sh -c "go version && go test -v ./..." || exit 1; \
+		echo "$(GREEN)✓ Go $$version tests passed$(NC)"; \
+	done
+	@echo ""
+	@echo "$(GREEN)All version tests completed successfully!$(NC)"
+
+docker-test-version: ## Test with specific Go version (use GO_VERSION=1.20)
+	@if [ -z "$(GO_VERSION)" ]; then \
+		echo "$(RED)Please specify GO_VERSION, e.g., make docker-test-version GO_VERSION=1.20$(NC)"; \
+		exit 1; \
+	fi
+	@echo "$(GREEN)Testing with Go $(GO_VERSION)...$(NC)"
+	@$(DOCKER_RUN) golang:$(GO_VERSION) sh -c "go version && go test -v -race -cover ./..."
+
+docker-test-matrix: ## Run comprehensive test matrix with all Go versions
+	@echo "$(GREEN)========================================$(NC)"
+	@echo "$(GREEN)Running Test Matrix$(NC)"
+	@echo "$(GREEN)========================================$(NC)"
+	@for version in $(GO_VERSIONS); do \
+		echo ""; \
+		echo "$(YELLOW)═══════════════════════════════════════$(NC)"; \
+		echo "$(YELLOW)   Go $$version Test Suite$(NC)"; \
+		echo "$(YELLOW)═══════════════════════════════════════$(NC)"; \
+		echo ""; \
+		echo "$(YELLOW)[1/4] Basic Tests$(NC)"; \
+		$(DOCKER_RUN) golang:$$version go test -short ./... || exit 1; \
+		echo "$(GREEN)✓ Basic tests passed$(NC)"; \
+		echo ""; \
+		echo "$(YELLOW)[2/4] Race Detection$(NC)"; \
+		$(DOCKER_RUN) golang:$$version go test -race ./... || exit 1; \
+		echo "$(GREEN)✓ Race detection passed$(NC)"; \
+		echo ""; \
+		echo "$(YELLOW)[3/4] Coverage Analysis$(NC)"; \
+		$(DOCKER_RUN) golang:$$version sh -c "go test -cover ./... | grep -E 'coverage:|ok'" || exit 1; \
+		echo "$(GREEN)✓ Coverage analysis completed$(NC)"; \
+		echo ""; \
+		echo "$(YELLOW)[4/4] Build Verification$(NC)"; \
+		$(DOCKER_RUN) golang:$$version go build -v ./... || exit 1; \
+		echo "$(GREEN)✓ Build verification passed$(NC)"; \
+		echo ""; \
+		echo "$(GREEN)═══════════════════════════════════════$(NC)"; \
+		echo "$(GREEN)✓ Go $$version: ALL TESTS PASSED$(NC)"; \
+		echo "$(GREEN)═══════════════════════════════════════$(NC)"; \
+	done
+	@echo ""
+	@echo "$(GREEN)========================================$(NC)"
+	@echo "$(GREEN)✓ Test Matrix Completed Successfully!$(NC)"
+	@echo "$(GREEN)========================================$(NC)"
+
+docker-bench: ## Run benchmarks with all Go versions using Docker
+	@echo "$(GREEN)Running benchmarks across Go versions...$(NC)"
+	@for version in $(GO_VERSIONS); do \
+		echo ""; \
+		echo "$(YELLOW)Benchmarks with Go $$version:$(NC)"; \
+		$(DOCKER_RUN) golang:$$version go test -bench=. -benchmem ./... | grep -E "Benchmark|ns/op|allocs/op"; \
+	done
+
+docker-coverage: ## Generate coverage report using Docker
+	@echo "$(GREEN)Generating coverage report with Docker...$(NC)"
+	@$(DOCKER_RUN) golang:1.22 sh -c "\
+		go test -v -coverprofile=coverage.out ./... && \
+		go tool cover -func=coverage.out && \
+		echo '' && \
+		echo 'Total Coverage:' && \
+		go tool cover -func=coverage.out | grep total"
+
+docker-lint: ## Run linting with golangci-lint in Docker
+	@echo "$(GREEN)Running linters in Docker...$(NC)"
+	@docker run --rm -v "$(PWD)":/workspace -w /workspace golangci/golangci-lint:latest \
+		golangci-lint run --timeout=5m ./...
+
+docker-clean: ## Clean Docker test artifacts and containers
+	@echo "$(GREEN)Cleaning Docker artifacts...$(NC)"
+	@docker system prune -f --volumes --filter "label=test=golang-yaml-advanced" 2>/dev/null || true
+	@rm -f coverage.out coverage.html
+	@echo "$(GREEN)Docker cleanup complete$(NC)"
+
+docker-shell: ## Open interactive shell in Docker container with Go
+	@echo "$(GREEN)Opening Docker shell with Go $(or $(GO_VERSION),1.22)...$(NC)"
+	@$(DOCKER_RUN) -it golang:$(or $(GO_VERSION),1.22) /bin/bash
+
+docker-test-quick: ## Quick test with latest 3 Go versions
+	@echo "$(GREEN)Quick testing with Go 1.21, 1.22, 1.23...$(NC)"
+	@for version in 1.21 1.22 1.23; do \
+		echo "$(YELLOW)Testing Go $$version...$(NC)"; \
+		$(DOCKER_RUN) golang:$$version go test ./... || exit 1; \
+		echo "$(GREEN)✓$(NC)"; \
+	done
+
+docker-test-compat: ## Test backwards compatibility (Go 1.20)
+	@echo "$(GREEN)Testing backwards compatibility with Go 1.20...$(NC)"
+	@$(DOCKER_RUN) golang:1.20 sh -c "\
+		echo 'Go version:' && go version && \
+		echo '' && \
+		echo 'Testing...' && \
+		go test -v ./..."
+
+docker-test-latest: ## Test with latest Go version
+	@echo "$(GREEN)Testing with latest Go version...$(NC)"
+	@$(DOCKER_RUN) golang:latest sh -c "\
+		echo 'Go version:' && go version && \
+		echo '' && \
+		go test -v -race -cover ./..."
+
+docker-ci: ## Run full CI pipeline in Docker
+	@echo "$(GREEN)Running CI pipeline in Docker...$(NC)"
+	@$(DOCKER_RUN) golang:1.22 sh -c "\
+		echo '=== Downloading dependencies ===' && \
+		go mod download && \
+		echo '' && \
+		echo '=== Running go vet ===' && \
+		go vet ./... && \
+		echo '' && \
+		echo '=== Running tests ===' && \
+		go test -v -race -cover ./... && \
+		echo '' && \
+		echo '=== Building ===' && \
+		go build -v ./..."
+
+# Docker Compose based testing
+compose-test: ## Run tests with all Go versions using Docker Compose
+	@echo "$(GREEN)Running tests with Docker Compose...$(NC)"
+	@docker-compose -f docker-compose.test.yml up --abort-on-container-exit --exit-code-from test-go120 test-go120
+	@docker-compose -f docker-compose.test.yml up --abort-on-container-exit --exit-code-from test-go121 test-go121
+	@docker-compose -f docker-compose.test.yml up --abort-on-container-exit --exit-code-from test-go122 test-go122
+	@docker-compose -f docker-compose.test.yml up --abort-on-container-exit --exit-code-from test-go123 test-go123
+
+compose-test-parallel: ## Run all tests in parallel using Docker Compose
+	@echo "$(GREEN)Running all tests in parallel...$(NC)"
+	@docker-compose -f docker-compose.test.yml up \
+		test-go120 test-go121 test-go122 test-go123 test-latest
+
+compose-test-single: ## Run test for single Go version (use SERVICE=test-go120)
+	@if [ -z "$(SERVICE)" ]; then \
+		echo "$(RED)Please specify SERVICE, e.g., make compose-test-single SERVICE=test-go120$(NC)"; \
+		exit 1; \
+	fi
+	@echo "$(GREEN)Running $(SERVICE)...$(NC)"
+	@docker-compose -f docker-compose.test.yml up --abort-on-container-exit --exit-code-from $(SERVICE) $(SERVICE)
+
+compose-bench: ## Run benchmarks using Docker Compose
+	@echo "$(GREEN)Running benchmarks...$(NC)"
+	@docker-compose -f docker-compose.test.yml up benchmark
+
+compose-coverage: ## Generate coverage report using Docker Compose
+	@echo "$(GREEN)Generating coverage report...$(NC)"
+	@mkdir -p coverage
+	@docker-compose -f docker-compose.test.yml up coverage
+	@echo "$(GREEN)Coverage report saved to coverage/$(NC)"
+
+compose-lint: ## Run linting using Docker Compose
+	@echo "$(GREEN)Running linters...$(NC)"
+	@docker-compose -f docker-compose.test.yml up lint
+
+compose-security: ## Run security scan using Docker Compose
+	@echo "$(GREEN)Running security scan...$(NC)"
+	@docker-compose -f docker-compose.test.yml up security
+
+compose-all: ## Run all tests, benchmarks, coverage, and linting
+	@echo "$(GREEN)Running complete test suite with Docker Compose...$(NC)"
+	@docker-compose -f docker-compose.test.yml up
+
+compose-down: ## Stop and remove all test containers
+	@echo "$(GREEN)Cleaning up Docker Compose containers...$(NC)"
+	@docker-compose -f docker-compose.test.yml down -v
+
+compose-logs: ## Show logs from all test containers
+	@docker-compose -f docker-compose.test.yml logs
+
+compose-ps: ## Show status of test containers
+	@docker-compose -f docker-compose.test.yml ps
+
+# Help for Docker targets
+docker-help: ## Show Docker-specific targets
+	@echo "$(GREEN)Docker Testing Targets:$(NC)"
+	@echo ""
+	@echo "$(YELLOW)── Docker Run Commands ──$(NC)"
+	@echo "  $(YELLOW)docker-test$(NC)          - Test with all supported Go versions"
+	@echo "  $(YELLOW)docker-test-version$(NC)  - Test with specific version (GO_VERSION=1.20)"
+	@echo "  $(YELLOW)docker-test-matrix$(NC)   - Comprehensive test matrix"
+	@echo "  $(YELLOW)docker-test-quick$(NC)    - Quick test with recent versions"
+	@echo "  $(YELLOW)docker-test-compat$(NC)   - Test Go 1.20 compatibility"
+	@echo "  $(YELLOW)docker-test-latest$(NC)   - Test with latest Go"
+	@echo "  $(YELLOW)docker-bench$(NC)         - Run benchmarks across versions"
+	@echo "  $(YELLOW)docker-coverage$(NC)      - Generate coverage report"
+	@echo "  $(YELLOW)docker-lint$(NC)          - Run golangci-lint"
+	@echo "  $(YELLOW)docker-ci$(NC)            - Run full CI pipeline"
+	@echo "  $(YELLOW)docker-shell$(NC)         - Interactive Docker shell"
+	@echo "  $(YELLOW)docker-clean$(NC)         - Clean Docker artifacts"
+	@echo ""
+	@echo "$(YELLOW)── Docker Compose Commands ──$(NC)"
+	@echo "  $(YELLOW)compose-test$(NC)         - Sequential tests with all versions"
+	@echo "  $(YELLOW)compose-test-parallel$(NC) - Parallel tests with all versions"
+	@echo "  $(YELLOW)compose-test-single$(NC)  - Test single version (SERVICE=test-go120)"
+	@echo "  $(YELLOW)compose-bench$(NC)        - Run benchmarks"
+	@echo "  $(YELLOW)compose-coverage$(NC)     - Generate coverage report"
+	@echo "  $(YELLOW)compose-lint$(NC)         - Run linting"
+	@echo "  $(YELLOW)compose-security$(NC)     - Run security scan"
+	@echo "  $(YELLOW)compose-all$(NC)          - Run everything"
+	@echo "  $(YELLOW)compose-down$(NC)         - Clean up containers"
+	@echo ""
+	@echo "$(GREEN)Examples:$(NC)"
+	@echo "  make docker-test"
+	@echo "  make docker-test-version GO_VERSION=1.21"
+	@echo "  make compose-test-parallel"
+	@echo "  make compose-test-single SERVICE=test-go122"
+	@echo "  make docker-shell GO_VERSION=1.20"

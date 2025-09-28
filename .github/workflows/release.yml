@@ -56,6 +56,8 @@ jobs:
           - amd64
           - arm64
         go:
+          # Current Go Versions available into GitHub Machines
+          - "1.20"
           - "1.21"
           - "1.22"
           - "1.23"
